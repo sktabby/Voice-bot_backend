@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Saarika Voicebot</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+
+<body>
+  <div class="bg-orb orb-1"></div>
+  <div class="bg-orb orb-2"></div>
+
+  <main class="container">
+    <header class="header">
+      <div class="brand">
+        <div class="logo">💗</div>
+        <div>
+          <h1>Saarika Voicebot</h1>
+          <p class="subtitle">Hold → Release → STT → Translation → Advisor</p>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <div class="lang">
+          <label for="langSelect">Language</label>
+          <select id="langSelect">
+            <option value="unknown">Auto (Detect)</option>
+            <option value="en-IN">English</option>
+            <option value="hi-IN">Hindi</option>
+            <option value="mr-IN">Marathi</option>
+          </select>
+        </div>
+      </div>
+    </header>
+
+    <!-- Primary Actions -->
+    <section class="card">
+      <div class="row actions">
+        <button id="holdBtn" class="btn btn-primary">
+          <span class="btn-ico">🎙️</span>
+          <span class="btn-text">Hold to Record</span>
+        </button>
+
+        <button id="askBtn" class="btn btn-ghost">
+          <span class="btn-ico">✨</span>
+          <span class="btn-text">Ask Advisor</span>
+        </button>
+
+        <div class="spacer"></div>
+
+        <button id="clearBtn" class="btn btn-soft">
+          <span class="btn-ico">🧹</span>
+          <span class="btn-text">Clear</span>
+        </button>
+
+        <button id="resetBtn" class="btn btn-soft">
+          <span class="btn-ico">♻️</span>
+          <span class="btn-text">Reset Session</span>
+        </button>
+      </div>
+
+      <p class="hint">Tip: Hold for 2–10 seconds, speak clearly, then release.</p>
+
+      <div class="status" id="status">
+        <span class="dot"></span>
+        <span class="status-text">Status: idle</span>
+      </div>
+    </section>
+
+    <!-- Results -->
+    <section class="card">
+      <div class="section-title">
+        <h2>Speech Result</h2>
+        <p class="muted">Transcript + English translation</p>
+      </div>
+
+      <div class="result-container">
+        <div class="box">
+          <h3>Transcript (Original)</h3>
+          <textarea id="outputOriginal" placeholder="Original transcript will appear here..."></textarea>
+        </div>
+
+        <div class="box">
+          <h3>Translation (English)</h3>
+          <textarea id="outputEnglish" placeholder="English translation will appear here..."></textarea>
+        </div>
+      </div>
+    </section>
+<div class="pink-bow" aria-hidden="true">
+  🎀
+</div>
+
+    <!-- Advisor -->
+    <section class="card">
+      <div class="section-title">
+        <h2>Education Advisor (Groq)</h2>
+        <p class="muted">Ask a question or let it auto-fill later</p>
+      </div>
+
+      <div class="advisor-controls">
+        <textarea id="chatInput" placeholder="Type your education question here..."></textarea>
+
+        <div class="row">
+          <button id="askBtn" class="btn btn-primary btn-wide">
+            <span class="btn-ico">💬</span>
+            <span class="btn-text">Ask Advisor</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="box reply">
+        <h3>Advisor Reply</h3>
+        <textarea id="outputReply" placeholder="LLM reply will appear here..."></textarea>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <span>Made with 💗 • Pink UI</span>
+    </footer>
+  </main>
+
+  <script src="./app.js"></script>
+</body>
+</html>

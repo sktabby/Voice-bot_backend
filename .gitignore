@@ -1,0 +1,16 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Env files (IMPORTANT)
+.env
+
+# Uploads
+backend/uploads/
+
+# OS
+.DS_Store
+
+# Node / frontend junk (if any)
+node_modules/
