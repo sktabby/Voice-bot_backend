@@ -1,62 +1,47 @@
-# import os
-# from groq import Groq
 from dotenv import load_dotenv
 load_dotenv()
-
-
-# # Create client (reads GROQ_API_KEY from environment automatically)
-# client = Groq()
-
-# # Pick a model you have access to from Groq Console -> Models
-# # (Example model names vary by account permissions)
-# DEFAULT_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
-
-# SYSTEM_PROMPT = """You are an education advisor.
-# Your job:
-# - Ask 1-2 clarifying questions if needed (class/grade, interests, goals).
-# - Suggest 2-3 options with short reasons.
-# - Give next steps (subjects, resources, exams) in bullet points.
-# - Keep it concise and friendly.
-# If user asks unrelated stuff, steer them back to education/career guidance.
-# """
-
-# def ask_education_advisor(user_prompt: str, model: str = DEFAULT_MODEL) -> str:
-#     user_prompt = (user_prompt or "").strip()
-#     if not user_prompt:
-#         return "Please type a question (e.g., 'What should I choose after 10th?')."
-
-#     completion = client.chat.completions.create(
-#         model=model,
-#         messages=[
-#             {"role": "system", "content": SYSTEM_PROMPT},
-#             {"role": "user", "content": user_prompt},
-#         ],
-#         temperature=0.4,
-#         max_tokens=400,
-#     )
-
-#     return completion.choices[0].message.content.strip()
-
 
 import os
 from groq import Groq
 
+# Initialize Groq client
 client = Groq()
 
+# Default model (can be overridden via .env)
 DEFAULT_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 
-SYSTEM_PROMPT = """You are an education advisor.
-Rules:
+# 🩷 SYSTEM PROMPT: Childish, calm, loving husband tone
+SYSTEM_PROMPT = """You are an education advisor, but you speak like a calm, childish, loving husband.
+
+Personality & Tone:
+- Always reply with a soft, playful, slightly childish tone.
+- Sound caring, understanding, and emotionally supportive.
+- Replies should feel like they are meant only for “my madamjii”.
+- Use gentle affection (e.g., “madamjii”, “acha acha”, “thoda sa suno na”).
+- Never sound rude, strict, robotic, or overly professional.
+- Stay calm and patient in every situation.
+
+Behavior Rules:
 - Use the conversation history to stay consistent.
-- Ask 1–2 clarifying questions if needed (grade, interests, goals).
-- Suggest 2–3 options with short reasons.
-- Give next steps in bullet points.
-- Keep answers concise and friendly.
+- Ask 1–2 clarifying questions gently (grade, interests, goals).
+- Suggest 2–3 options with short, simple reasons.
+- Give next steps in soft bullet points.
+- Keep answers concise, friendly, and reassuring.
+- Use at most 1–2 emojis only if they feel natural.
+
+Goal:
+Guide madamjii in education decisions while making her feel heard,
+safe, and supported — like “main hoon na” energy.
 """
 
 def groq_reply(messages, model: str = DEFAULT_MODEL) -> str:
     """
-    messages: list of dicts like [{"role":"user","content":"..."}, ...]
+    messages: list of dicts like:
+    [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": "..." }
+    ]
+
     Returns assistant reply text.
     """
     completion = client.chat.completions.create(
@@ -65,4 +50,16 @@ def groq_reply(messages, model: str = DEFAULT_MODEL) -> str:
         temperature=0.4,
         max_tokens=500,
     )
+
     return completion.choices[0].message.content.strip()
+
+
+# 🧪 Example usage (optional testing)
+if __name__ == "__main__":
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": "I am confused about choosing science or commerce"}
+    ]
+
+    reply = groq_reply(messages)
+    print(reply)
