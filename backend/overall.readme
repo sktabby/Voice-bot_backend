@@ -1,0 +1,511 @@
+# Voicebot Backend (STT + Translation + Chat with Memory)
+
+## Overview
+
+This backend is a FastAPI service that supports two main interaction modes:
+
+1. **Text Chat (`/chat`)**
+
+   * Accepts a text prompt and a session ID
+   * Uses stored session history (“memory”)
+   * Returns a reply and keeps the conversation context across turns
+
+2. **Voicebot (`/voicebot`)**
+
+   * Accepts an audio file + optional language hint + session ID
+   * Runs Speech-to-Text (STT)
+   * Detects language (if not provided)
+   * Translates speech → English (for LLM processing)
+   * Calls LLM with conversation memory
+   * Translates final reply back to detected user language
+   * Returns full metadata for debugging and frontend integration
+
+The project also includes:
+
+* A `/health` endpoint for uptime checks
+* A `/reset` endpoint to clear a session’s conversation memory
+* A local upload storage mechanism for incoming audio files
+* Basic CORS configuration for connecting a frontend
+
+---
+
+## High-Level Folder Structure
+
+A typical structure based on your code looks like this:
+
+```
+backend/
+├─ main.py
+├─ .env
+├─ uploads/
+│
+├─ core/
+│  ├─ config.py
+│  ├─ sessions.py
+│  └─ clients.py
+│
+├─ routes/
+│  ├─ health.py
+│  ├─ reset.py
+│  ├─ chat.py
+│  └─ voicebot.py
+│
+├─ schemas/
+│  └─ chat.py
+│
+├─ services/
+│  ├─ storage_service.py
+│  ├─ stt_service.py
+│  ├─ translate_service.py
+│  └─ llm_service.py
+│
+└─ chatbot/
+   └─ groq_advisor.py
+```
+
+---
+
+## Environment Variables
+
+This backend loads environment variables using `python-dotenv`.
+
+### Required
+
+* `SARVAM_API_KEY`
+  Used for Sarvam STT and translation services.
+
+* `GROQ_API_KEY`
+  Used by the Groq client to generate chat responses.
+
+### Optional
+
+* `GROQ_MODEL`
+  Model name used by Groq (defaults to `"llama-3.1-8b-instant"` in your snippet).
+
+Example `.env`:
+
+```env
+SARVAM_API_KEY=your_sarvam_key_here
+GROQ_API_KEY=your_groq_key_here
+GROQ_MODEL=llama-3.1-8b-instant
+```
+
+---
+
+## What Each File Does
+
+### `main.py`
+
+**Purpose:** Application entry point
+
+* Creates the FastAPI app
+* Adds CORS middleware so your frontend can call the backend
+* Registers routers:
+
+  * `routes/health.py`
+  * `routes/reset.py`
+  * `routes/chat.py`
+  * `routes/voicebot.py`
+
+Key responsibilities:
+
+* Central place where all endpoints are exposed
+* Controls allowed origins for frontend communication (localhost/ngrok/etc.)
+
+---
+
+### `core/config.py`
+
+**Purpose:** Central configuration and boot-time checks
+
+* Loads `.env`
+* Resolves `BASE_DIR` (project root reference)
+* Creates `uploads/` directory automatically (if it doesn’t exist)
+* Validates `SARVAM_API_KEY` and throws a clear error if missing
+* Defines `MAX_TURNS` (conversation memory limit)
+
+Important constants:
+
+* `UPLOAD_DIR`: where audio files get stored
+* `MAX_TURNS`: maximum number of conversational turns retained per session
+
+---
+
+### `core/sessions.py`
+
+**Purpose:** In-memory session management (chat history storage)
+
+* Stores conversation history per session in a global dictionary:
+
+  * `SESSIONS: Dict[str, List[dict]]`
+* Functions:
+
+  * `get_session_history(session_id)`: returns a list for that session (creates if missing)
+  * `trim_history(history)`: keeps only the last `MAX_TURNS * 2` messages
+    (because each “turn” has 2 messages: user + assistant)
+  * `reset_session(session_id)`: clears session history
+
+Note:
+
+* This is **in-memory**, so restarting the server clears all sessions.
+* For production scale, this would typically move to Redis/DB.
+
+---
+
+### `core/clients.py`
+
+**Purpose:** API client initialization
+
+* Holds shared initialized clients (ex: `sarvam_client`)
+* Centralizes external service client setup so other services can import it cleanly
+
+---
+
+### `schemas/chat.py`
+
+**Purpose:** Request validation schema
+
+* `ChatRequest` defines the required structure for `/chat`:
+
+  * `session_id: str`
+  * `prompt: str`
+
+This ensures predictable inputs and clean validation errors.
+
+---
+
+### `routes/health.py`
+
+**Purpose:** Health check endpoint
+
+* `GET /health` returns `{ "status": "ok" }`
+* Useful for monitoring, uptime checks, or “is backend alive?” testing.
+
+---
+
+### `routes/reset.py`
+
+**Purpose:** Session reset endpoint
+
+* `POST /reset`
+* Reads `session_id` from payload
+* Calls `reset_session(session_id)`
+* Returns `{ "ok": True, "session_id": ... }`
+
+Use case:
+
+* When the user clicks “reset conversation” on the frontend.
+
+---
+
+### `routes/chat.py`
+
+**Purpose:** Text chat endpoint with memory
+
+* `POST /chat`
+* Validates:
+
+  * `session_id` must exist
+  * if prompt is empty → returns a safe message
+* Fetches history:
+
+  * `history = get_session_history(session_id)`
+* Calls:
+
+  * `reply = chat_with_memory(history, prompt)`
+* Appends messages to history (user + assistant)
+* Trims stored history to enforce memory limit
+* Returns:
+
+  * `{ "reply": reply, "session_id": session_id }`
+
+---
+
+### `routes/voicebot.py`
+
+**Purpose:** Voice-based endpoint (audio → reply in user language)
+
+* `POST /voicebot` accepts:
+
+  * `file` (audio)
+  * `language_code` (optional, default `"unknown"`)
+  * `session_id` (required)
+
+Key steps inside:
+
+1. **Validate session_id**
+2. **Save uploaded audio** using `services/storage_service.save_upload`
+3. **STT transcription** using `services/stt_service.transcribe_audio`
+4. **Choose detected language** with `pick_detected_lang()`
+5. **Translate speech → English** (only if not already English)
+6. **LLM call with memory** using `services/llm_service.chat_with_memory`
+7. **Translate reply English → detected language**
+8. Return a rich JSON payload containing transcripts, translations, detected language, and raw API responses
+
+This endpoint is designed to keep the frontend simple while still exposing enough metadata for debugging.
+
+---
+
+### `services/storage_service.py`
+
+**Purpose:** Upload persistence utility
+
+* Validates file exists and isn’t empty
+* Generates a unique filename (timestamp-based)
+* Writes bytes to `UPLOAD_DIR`
+* Returns the saved path
+
+---
+
+### `services/stt_service.py`
+
+**Purpose:** Speech-to-text wrapper
+
+* Reads the audio file
+* Calls Sarvam STT:
+
+  * `sarvam_client.speech_to_text.transcribe(...)`
+  * model `"saarika:v2.5"`
+* Measures latency in milliseconds
+* Normalizes API response:
+
+  * `model_dump()` or `dict()` if available
+* Extracts transcript from:
+
+  * `transcript` OR `text` OR `output`
+* Returns:
+
+  * `(transcript, full_json_data, latency_ms)`
+
+---
+
+### `services/translate_service.py`
+
+**Purpose:** Translation wrapper with chunking
+
+* Sarvam translation has a character limit (Mayura limit ~1000 chars)
+* Implements:
+
+  * `_chunk_text()` to split input into safe chunks (<= 950 chars)
+  * Preserves paragraph boundaries where possible
+* `translate_text()`:
+
+  * Returns early if input is empty
+  * Skips translation when `source == target` (prevents API errors)
+  * Translates chunk-by-chunk
+  * Aggregates final result with `"\n".join(...)`
+  * Returns:
+
+    * `(translated_text, metadata_with_chunk_count_and_responses)`
+
+---
+
+### `services/llm_service.py`
+
+**Purpose:** LLM interaction with memory context
+
+* Builds a single message list:
+
+  * System prompt
+  * Previous history
+  * New user prompt
+* Delegates response generation to `groq_reply`
+
+This is the “bridge” between session memory and the Groq chat response.
+
+---
+
+### `chatbot/groq_advisor.py`
+
+**Purpose:** Groq client + system prompt enforcement
+
+* Loads environment variables
+* Initializes Groq client
+* Defines a strict `SYSTEM_PROMPT` to control output
+* Provides `groq_reply(...)` helper that:
+
+  * Builds the final chat request
+  * Adds additional guarding text to reduce unwanted topics
+  * Uses controlled `temperature` and `max_tokens` for consistent outputs
+
+---
+
+## Code Flow (End-to-End)
+
+### A) Text Chat Flow (`POST /chat`)
+
+1. **Frontend** sends:
+
+   ```json
+   { "session_id": "abc123", "prompt": "I am confused about choosing science or commerce" }
+   ```
+
+2. `routes/chat.py`:
+
+   * Validates session_id and prompt
+   * Loads history from `core/sessions.py`
+   * Calls `services/llm_service.chat_with_memory(history, prompt)`
+
+3. `services/llm_service.py`:
+
+   * Combines system prompt + history + new user message
+   * Calls `groq_reply(...)`
+
+4. **Groq returns reply**
+
+5. Backend appends:
+
+   * `{"role":"user","content":prompt}`
+   * `{"role":"assistant","content":reply}`
+
+6. History is trimmed to last `MAX_TURNS` turns
+
+7. Response returned:
+
+   ```json
+   { "reply": "...", "session_id": "abc123" }
+   ```
+
+---
+
+### B) Voicebot Flow (`POST /voicebot`)
+
+1. **Frontend** sends multipart form-data:
+
+   * `file`: audio blob
+   * `language_code`: `"unknown"` or `"hi-IN"` etc.
+   * `session_id`: `"abc123"`
+
+2. `routes/voicebot.py`:
+
+   * Validates session_id
+   * Saves audio using `save_upload()` → stored in `uploads/`
+
+3. `services/stt_service.transcribe_audio()`:
+
+   * Calls Sarvam STT (`saarika:v2.5`)
+   * Extracts transcript + returns raw JSON + latency
+
+4. `pick_detected_lang()`:
+
+   * If UI passed a real language code, use it
+   * Else tries multiple keys from STT JSON (`language_code`, `detected_language_code`, etc.)
+   * Normalizes `en` → `en-IN`, `hi` → `hi-IN`, `mr/mar` → `mr-IN`
+
+5. Translate speech → English:
+
+   * If detected language is English, skip translation
+   * Else call `translate_text(transcript_original, detected_lang, "en-IN")`
+
+6. LLM call:
+
+   * Use translated English as prompt (preferred)
+   * Load session history
+   * Call `chat_with_memory(history, llm_prompt)`
+   * Append user+assistant to memory
+   * Trim history
+
+7. Translate English reply → user language:
+
+   * If detected language is English, return as-is
+   * Else call `translate_text(llm_reply, "en-IN", detected_lang)`
+
+8. Returns a detailed JSON like:
+
+   * `transcript_original`
+   * `translation_en`
+   * `llm_reply`
+   * `llm_reply_hi` (kept for frontend compatibility, now contains reply in detected language)
+   * `stt_response`, `translate_response`, and language codes
+
+---
+
+## API Endpoints Summary
+
+### `GET /health`
+
+Response:
+
+```json
+{ "status": "ok" }
+```
+
+### `POST /reset`
+
+Payload:
+
+```json
+{ "session_id": "abc123" }
+```
+
+Response:
+
+```json
+{ "ok": true, "session_id": "abc123" }
+```
+
+### `POST /chat`
+
+Payload:
+
+```json
+{ "session_id": "abc123", "prompt": "Hello" }
+```
+
+Response:
+
+```json
+{ "reply": "...", "session_id": "abc123" }
+```
+
+### `POST /voicebot`
+
+Form-data:
+
+* `file`: audio
+* `language_code`: `"unknown"` (default) or `"hi-IN"`, `"en-IN"`, etc.
+* `session_id`: required
+
+Response includes:
+
+* transcripts, translations, detected language, and raw service responses
+
+---
+
+## Running Locally
+
+1. Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+2. Create `.env` in `backend/`:
+
+```env
+SARVAM_API_KEY=...
+GROQ_API_KEY=...
+GROQ_MODEL=llama-3.1-8b-instant
+```
+
+3. Start server:
+
+```bash
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+4. Test quickly:
+
+* `GET http://localhost:8000/health`
+
+---
+
+## Notes / Limitations (Practical)
+
+* **Sessions are in-memory**: restarting the server clears all conversation histories.
+* **Uploads are stored locally** in `uploads/`: over time, this folder can grow.
+  You may want a cleanup job or storage bucket later.
+* **Translation chunking** exists to avoid Sarvam character limits and prevent errors.
+* **CORS** currently includes `"*"` plus explicit origins. For production, it’s safer to restrict origins to your real frontend domain(s).
+
+---

@@ -14,3 +14,9 @@ def trim_history(history: List[dict]) -> List[dict]:
 
 def reset_session(session_id: str) -> None:
     SESSIONS.pop(session_id, None)
+
+
+# This module manages in-memory conversation sessions.
+# It initializes and retrieves per-session chat history,
+# trims stored messages to a fixed turn limit to control memory,
+# and provides a reset mechanism to clear session state when needed.

@@ -23,3 +23,10 @@ def chat(req: ChatRequest):
     SESSIONS[session_id] = trim_history(history)
 
     return {"reply": reply, "session_id": session_id}
+
+
+
+# This API route handles chat requests for a given session.
+# It validates inputs, retrieves and updates session-based conversation history,
+# invokes the LLM service with memory context, trims stored turns to a fixed limit,
+# and returns the generated reply while maintaining session continuity.

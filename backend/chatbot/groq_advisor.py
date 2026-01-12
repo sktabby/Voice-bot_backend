@@ -156,7 +156,16 @@ if __name__ == "__main__":
     print(reply)
 
 
+<<<<<<< HEAD
 #     ]
 
 #     reply = groq_reply(messages)
 #     print(reply)
+=======
+
+# This script sets up a Groq-based Education Advisor chatbot.
+# It loads configuration from environment variables, initializes the Groq client,
+# enforces a strict system prompt for domain control, sanitizes user input,
+# appends conversation history, and sends a structured chat completion request
+# with controlled temperature and token limits to produce consistent guidance.
+>>>>>>> bb1c001 (Added comments on the backend code)

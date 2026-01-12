@@ -16,3 +16,9 @@ async def save_upload(file: UploadFile) -> Path:
 
     raw_path.write_bytes(content)
     return raw_path
+
+
+
+# This async utility validates an uploaded file, generates a unique filename,
+# persists the file to the configured upload directory, and returns the saved path
+# while handling empty or invalid upload errors.

@@ -11,3 +11,8 @@ def reset(payload: dict):
         raise HTTPException(status_code=400, detail="Missing session_id")
     reset_session(session_id)
     return {"ok": True, "session_id": session_id}
+
+
+# This API route resets a conversation session.
+# It validates the session identifier, clears the associated in-memory
+# chat history, and confirms successful session termination to the client.

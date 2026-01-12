@@ -22,3 +22,9 @@ def transcribe_audio(path: Path, language_code: str) -> Tuple[str, Dict[str, Any
 
     transcript = (data.get("transcript") or data.get("text") or data.get("output") or "").strip()
     return transcript, data, latency_ms
+
+
+# This service function sends an audio file to the Sarvam speech-to-text API,
+# measures transcription latency, normalizes the API response into a dictionary,
+# extracts the final transcript text, and returns the transcript along with
+# raw metadata and processing time.

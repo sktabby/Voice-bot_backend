@@ -10,7 +10,7 @@ app = FastAPI(title="Voicebot Backend (STT + Translate + Groq Chat)")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "https://YOURNGROK.ngrok-free.dev","*"],
+    allow_origins=["http://localhost:5050", "https://YOURNGROK.ngrok-free.dev","*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -21,3 +21,9 @@ app.include_router(reset_router)
 app.include_router(chat_router)
 app.include_router(voicebot_router)
 
+
+
+# This is the main FastAPI application entry point.
+# It initializes the backend service, configures CORS for frontend access,
+# registers health, session reset, text chat, and voicebot routes,
+# and exposes a unified API for STT, translation, and LLM-powered conversations.

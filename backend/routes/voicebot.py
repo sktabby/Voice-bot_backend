@@ -114,3 +114,12 @@ async def voicebot(
         "stt_response": stt_json,
         "translate_response": translate_json,
     }
+
+
+
+# This API route implements a multilingual voice-based chat flow.
+# It handles audio uploads, performs speech-to-text with language detection,
+# translates non-English speech to English for LLM processing, maintains
+# session-based conversation memory, generates a response via the LLM,
+# and translates the final reply back to the user’s detected language
+# while preserving frontend-compatible response keys.

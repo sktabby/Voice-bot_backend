@@ -13,3 +13,9 @@ if not SARVAM_API_KEY:
     raise RuntimeError("Missing SARVAM_API_KEY. Create backend/.env with SARVAM_API_KEY=...")
 
 MAX_TURNS = 8
+
+
+
+# This configuration module loads environment variables, resolves project paths,
+# ensures required directories exist, validates the presence of the SARVAM API key,
+# and defines global constants used for request limits and file handling.
