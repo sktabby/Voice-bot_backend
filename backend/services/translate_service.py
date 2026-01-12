@@ -43,7 +43,6 @@
 
 
 
-<<<<<<< HEAD
 # from typing import Tuple, Optional, Dict, Any
 # from core.clients import sarvam_client
 
@@ -89,8 +88,6 @@
 
 
 
-=======
->>>>>>> bb1c001 (Added comments on the backend code)
 from typing import Tuple, Optional, Dict, Any
 from core.clients import sarvam_client
 
@@ -189,13 +186,3 @@ def translate_text(
 
     translated = "\n".join([c for c in translated_chunks if c]).strip()
     return translated, {"chunk_count": len(chunks), "responses": responses}
-<<<<<<< HEAD
-=======
-
-
-# This module handles text translation using the Sarvam API.
-# It safely splits long input into size-limited chunks to respect API constraints,
-# skips unnecessary translations when source and target languages match,
-# normalizes API responses, aggregates translated chunks, and returns
-# the final translated text along with structured metadata.
->>>>>>> bb1c001 (Added comments on the backend code)
