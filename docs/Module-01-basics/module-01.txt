@@ -1,0 +1,137 @@
+Module 1: Audio Fundamentals (Foundation Layer)
+
+1) What is an audio signal?
+An audio signal is just a changing value over time that represents sound.
+In the real world
+Sound = pressure vibrations in air.
+Your ear senses how pressure changes over time.
+In digital
+We store sound as a sequence of numbers over time:
+Time on X-axis
+Amplitude (loudness/pressure level) on Y-axis
+That graph is the waveform.
+Key words
+Waveform: shape of the signal over time
+Amplitude: how “big” the wave is (loudness)
+Frequency: how fast it oscillates (pitch)
+
+2) Waveforms, amplitude, frequency (the core trio)
+✅ Amplitude (loudness)
+Amplitude is the height of the wave.
+Bigger amplitude = louder sound
+Smaller amplitude = softer sound
+Too big = clipping (distortion)
+Clipping happens when the wave exceeds the max value the system can store.
+
+✅ Frequency (pitch)
+Frequency = how many cycles per second (Hz).
+100 Hz = low pitch (bass-like)
+1000 Hz = higher pitch
+Human speech useful range is mostly ~80 Hz to ~8 kHz (rough intuition)
+Speech recognition doesn’t need “music quality”. It needs “speech clarity”.
+
+3) Sample rate (16kHz vs 44.1kHz) — why STT prefers 16kHz
+What is sample rate?
+Sample rate = how many measurements per second we take from the waveform.
+16 kHz = 16,000 samples per second
+44.1 kHz = 44,100 samples per second
+Why it matters
+More samples = more detail = bigger data + more compute.
+The big rule (Nyquist)
+To represent a frequency of X Hz, you need a sample rate of at least 2X.
+So:
+16 kHz sample rate can represent frequencies up to ~8 kHz
+44.1 kHz can represent up to ~22.05 kHz
+Why 16 kHz is enough for STT
+Most speech information lives under ~8 kHz.
+So 16kHz captures what matters, without extra cost.
+That’s why many STT pipelines standardize to:
+✅ 16kHz, mono, 16-bit PCM
+
+4) Bit depth (16-bit PCM) — what it really means
+What is bit depth?
+Bit depth = how precise each sample value is.
+Think of it like:
+Sample rate = how often you measure
+Bit depth = how accurate each measurement is
+Common:
+16-bit: 65,536 possible levels (from -32768 to +32767)
+24-bit: more precision, bigger files
+8-bit: low quality
+Why 16-bit PCM is standard
+Good dynamic range for speech
+Compatible with almost all audio tooling + ML pipelines
+Keeps file sizes manageable
+
+5) Mono vs Stereo (why mono is enough for speech)
+Mono
+One channel. Single waveform.
+Stereo
+Two channels: Left + Right.
+Why speech pipelines prefer mono
+Speech content is the same; stereo doesn’t add meaning for STT
+Stereo doubles data size and compute
+Many models are trained on mono
+So for STT:
+✅ convert stereo → mono early
+
+6) Audio formats: WAV vs MP3/AAC vs Opus
+✅ WAV (PCM) — best for ML
+Usually raw PCM samples
+No compression artifacts
+Predictable for models
+Used in ML because it’s “clean”.
+
+✅ MP3 / AAC — compressed
+These remove information humans don’t notice much, to reduce size.
+But STT models may suffer because:
+Compression introduces artifacts
+Fine details in consonants (“t”, “k”, “s”) can get slightly blurred
+Still usable, but:
+✅ often you convert MP3/AAC → WAV PCM before STT
+
+✅ Opus — streaming king (WebRTC)
+Opus is designed for:
+Low-latency streaming
+Voice calls
+Variable network conditions
+Great for transport, but models often want PCM input.
+So typical real-time pipeline:
+Opus (transport) → decode → PCM → STT
+
+Self-Questioning (Mastery Drill)
+Read each question, answer aloud, then compare with the answer.
+A) Core concepts
+Q1. What is an audio waveform?
+A: A graph of amplitude (signal value) over time, representing sound.
+Q2. Amplitude controls what?
+A: Loudness/strength of sound. Too high causes clipping.
+Q3. Frequency controls what?
+A: Pitch. Higher frequency = higher pitch.
+
+B) Sample rate
+Q4. What does 16 kHz mean?
+A: 16,000 samples per second.
+Q5. Why is Nyquist important?
+A: To capture frequency X, sample rate must be at least 2X.
+Q6. Why do STT systems often use 16kHz?
+A: It captures up to ~8kHz, which contains most speech information, and is efficient.
+
+C) Bit depth
+Q7. What does bit depth control?
+A: Precision (number of possible amplitude levels per sample).
+Q8. Why is 16-bit PCM common in ML?
+A: Good balance of quality, compatibility, and file size.
+
+D) Mono vs Stereo
+Q9. Why mono is enough for speech recognition?
+A: Speech meaning doesn’t require two channels; mono reduces size/compute and matches training.
+
+E) Formats
+Q10. Why is WAV PCM preferred for STT?
+A: Lossless, predictable, no compression artifacts.
+Q11. Why MP3/AAC can slightly hurt STT?
+A: Compression artifacts blur details important for recognition.
+Q12. Why Opus is popular in calls?
+A: Low latency, robust streaming; then you decode to PCM for ML.
+
