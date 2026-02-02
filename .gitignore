@@ -14,3 +14,10 @@ backend/uploads/
 
 # Node / frontend junk (if any)
 node_modules/
+
+
+
+# Runtime audio stream files
+backend/**/stream_uploads/
+*.webm
+*.bin
