@@ -1,6 +1,6 @@
 import { CONFIG } from "./config.js";
 
-export function createRecorder({ onStatus, onButtonLabel }) {
+export function createRecorder({ onStatus, onButtonLabel, onChunk, timesliceMs = 500 }) {
   let mediaRecorder = null;
   let chunks = [];
   let isRecording = false;
@@ -15,13 +15,42 @@ export function createRecorder({ onStatus, onButtonLabel }) {
     }
 
     streamRef = await navigator.mediaDevices.getUserMedia({ audio: true });
-    mediaRecorder = new MediaRecorder(streamRef);
+
+    // Optional mime-type preference (keeps default if unsupported)
+    const preferredTypes = [
+      "audio/webm;codecs=opus",
+      "audio/webm",
+      "audio/ogg;codecs=opus",
+      "audio/ogg",
+    ];
+
+    let options = undefined;
+    for (const t of preferredTypes) {
+      if (window.MediaRecorder?.isTypeSupported?.(t)) {
+        options = { mimeType: t };
+        break;
+      }
+    }
+
+    mediaRecorder = new MediaRecorder(streamRef, options);
     chunks = [];
     pressStartTs = Date.now();
 
     return await new Promise((resolve, reject) => {
       mediaRecorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) chunks.push(e.data);
+        if (!e.data || e.data.size === 0) return;
+
+        // Keep for final combined blob (batch fallback)
+        chunks.push(e.data);
+
+        // NEW: streaming callback (near real-time base)
+        const chunkIndex = chunks.length - 1;
+        onChunk?.({
+          chunkIndex,
+          chunk: e.data,
+          mimeType: mediaRecorder.mimeType,
+          ts: Date.now(),
+        });
       };
 
       mediaRecorder.onstart = () => {
@@ -30,10 +59,13 @@ export function createRecorder({ onStatus, onButtonLabel }) {
         isRecording = true;
       };
 
-      mediaRecorder.onerror = (e) => reject(e.error || new Error("MediaRecorder error"));
+      mediaRecorder.onerror = (e) => {
+        reject(e?.error || new Error("MediaRecorder error"));
+      };
 
       mediaRecorder.onstop = () => {
         streamRef?.getTracks().forEach((t) => t.stop());
+
         const durationMs = Date.now() - pressStartTs;
         const blob = new Blob(chunks, { type: mediaRecorder.mimeType });
 
@@ -44,10 +76,13 @@ export function createRecorder({ onStatus, onButtonLabel }) {
           resolve({ tooShort: true });
           return;
         }
+
+        // Final combined audio (same as before)
         resolve({ blob, mimeType: mediaRecorder.mimeType });
       };
 
-      mediaRecorder.start();
+      // ✅ KEY CHANGE: timeslice makes browser emit chunks while recording
+      mediaRecorder.start(timesliceMs);
     });
   }
 

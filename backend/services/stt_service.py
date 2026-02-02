@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Tuple, Dict, Any
 from core.clients import sarvam_client
 
+
 def transcribe_audio(path: Path, language_code: str) -> Tuple[str, Dict[str, Any], int]:
     t0 = time.time()
     with open(path, "rb") as f:
@@ -22,6 +23,13 @@ def transcribe_audio(path: Path, language_code: str) -> Tuple[str, Dict[str, Any
 
     transcript = (data.get("transcript") or data.get("text") or data.get("output") or "").strip()
     return transcript, data, latency_ms
+
+
+# ✅ NEW (Phase 2): partial STT helper
+def transcribe_partial(path: Path, language_code: str) -> Tuple[str, Dict[str, Any], int]:
+    # For Phase 2, simplest approach: reuse full STT on "audio so far"
+    # Later we can optimize windowed audio / incremental STT.
+    return transcribe_audio(path, language_code)
 
 
 # This service function sends an audio file to the Sarvam speech-to-text API,

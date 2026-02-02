@@ -65,3 +65,42 @@ export async function voicebot(formData) {
   if (data == null) throw new Error(`Voicebot returned non-JSON: ${text}`);
   return data;
 }
+
+// ✅ Stream: upload one audio chunk
+export async function streamChunk(formData) {
+  const { text } = await request("stream/chunk", {
+    method: "POST",
+    body: formData,
+  });
+
+  const data = tryJson(text);
+  if (data == null) throw new Error(`streamChunk returned non-JSON: ${text}`);
+  return data;
+}
+
+// ✅ Stream: finalize session (backend merges + processes and returns final response)
+export async function streamFinalize(session_id, language_code = "unknown") {
+  const form = new FormData();
+  form.append("session_id", session_id);
+  form.append("language_code", language_code);
+
+  const { text } = await request("stream/finalize", {
+    method: "POST",
+    body: form,
+  });
+
+  const data = tryJson(text);
+  if (data == null) throw new Error(`streamFinalize returned non-JSON: ${text}`);
+  return data;
+}
+
+// ✅ NEW (Phase 2): get partial transcript while recording (polling)
+export async function streamPartial(session_id) {
+  const { text } = await request(`stream/partial?session_id=${encodeURIComponent(session_id)}`, {
+    method: "GET",
+  });
+
+  const data = tryJson(text);
+  if (data == null) throw new Error(`streamPartial returned non-JSON: ${text}`);
+  return data;
+}

@@ -1,6 +1,6 @@
 import { CONFIG } from "./config.js";
 import { getSessionId } from "./session.js";
-import { health, resetSession, chat, voicebot } from "./api.js";
+import { health, resetSession, chat, voicebot, streamChunk, streamFinalize, streamPartial } from "./api.js";
 import { autoResize, setStatus, setButtonLabel, clearOutputs } from "./dom.js";
 import { addChatTurn } from "./chatlog.js";
 import { createRecorder } from "./recorder.js";
@@ -32,9 +32,118 @@ if (!els.statusEl) console.warn("Missing #status in HTML");
 
 const SESSION_ID = getSessionId();
 
+// ✅ Streaming upload queue (keeps chunk uploads ordered)
+let uploadChain = Promise.resolve();
+let streamError = null;
+
+// ✅ Guard to ensure we finalize only once per recording
+let finalized = false;
+
+// ✅ Phase 2: partial transcript polling
+let partialTimer = null;
+
+function startPartialPolling() {
+  stopPartialPolling();
+
+  partialTimer = setInterval(async () => {
+    try {
+      const p = await streamPartial(SESSION_ID);
+
+      // ✅ Phase 3: backend decided speech is over
+      if (p?.auto_finalize && !finalized) {
+        finalized = true;
+        stopPartialPolling();
+
+        // Stop recorder if still recording
+        if (recorder.recording()) {
+          recorder.stop();
+        }
+
+        setStatus(els.statusEl, "auto-finalizing (silence detected)...");
+
+        try {
+          await uploadChain;
+
+          const data = await streamFinalize(
+            SESSION_ID,
+            els.langSelect?.value || "unknown"
+          );
+
+          if (els.outputOriginalEl) els.outputOriginalEl.value = data.transcript_original || "";
+          if (els.outputEnglishEl) els.outputEnglishEl.value = data.translation_en || "";
+          if (els.outputReplyEl) els.outputReplyEl.value = data.llm_reply || "";
+          if (els.outputReplyHindiEl) els.outputReplyHindiEl.value = data.llm_reply_hi || "";
+
+          resizeAll();
+
+          if (els.chatLog) {
+            addChatTurn(els.chatLog, {
+              lang: els.langSelect?.value || "Auto",
+              transcript: els.outputOriginalEl?.value || "",
+              translation: els.outputEnglishEl?.value || "",
+              reply: els.outputReplyEl?.value || "",
+            });
+          }
+
+          setStatus(els.statusEl, `done (latency: ${data.latency_ms} ms)`);
+        } catch (e) {
+          console.error(e);
+          setStatus(els.statusEl, "auto-finalize failed");
+        }
+
+        return; // ⛔ stop further polling
+      }
+
+      // ✅ Phase 2: partial transcript updates
+      if (p?.partial_text && els.outputOriginalEl) {
+        els.outputOriginalEl.value = p.partial_text;
+        autoResize(els.outputOriginalEl);
+      }
+
+    } catch (e) {
+      console.warn("partial polling failed:", e?.message || e);
+    }
+  }, 1000);
+}
+
+
+function stopPartialPolling() {
+  if (partialTimer) clearInterval(partialTimer);
+  partialTimer = null;
+}
+
+function enqueueUpload(fn) {
+  uploadChain = uploadChain.then(fn).catch((e) => {
+    streamError = e;
+    console.error("stream upload failed:", e);
+  });
+  return uploadChain;
+}
+
 const recorder = createRecorder({
   onStatus: (m) => setStatus(els.statusEl, m),
   onButtonLabel: (t) => setButtonLabel(els.holdBtn, t),
+
+  timesliceMs: 500,
+  onChunk: ({ chunkIndex, chunk, mimeType }) => {
+    if (chunkIndex === 0) {
+      setStatus(els.statusEl, "streaming audio chunks...");
+      streamError = null;
+    }
+
+    enqueueUpload(async () => {
+      const form = new FormData();
+      const ext = (mimeType || "").includes("webm") ? "webm" : "wav";
+
+      form.append("file", chunk, `chunk_${chunkIndex}.${ext}`);
+      form.append("session_id", SESSION_ID);
+      form.append("chunk_index", String(chunkIndex));
+      form.append("mime_type", mimeType || "");
+      form.append("language_code", els.langSelect?.value || "unknown");
+
+      await streamChunk(form);
+    });
+  },
 });
 
 function resizeAll() {
@@ -104,7 +213,6 @@ async function processVoice(blob, mimeType) {
 
     resizeAll();
 
-    // Only log if chatLog exists
     if (els.chatLog) {
       addChatTurn(els.chatLog, {
         lang: els.langSelect?.value || "Auto",
@@ -124,9 +232,14 @@ async function processVoice(blob, mimeType) {
   }
 }
 
-// --- Hold-to-record flow (works even without chatInput/askBtn/heartLogo) ---
+// --- Hold-to-record flow ---
 els.holdBtn?.addEventListener("pointerdown", async (e) => {
   e.preventDefault();
+
+  // reset state for new recording
+  uploadChain = Promise.resolve();
+  streamError = null;
+  finalized = false;
 
   // clear outputs for new recording
   if (els.outputOriginalEl) els.outputOriginalEl.value = "";
@@ -135,14 +248,62 @@ els.holdBtn?.addEventListener("pointerdown", async (e) => {
   if (els.outputReplyHindiEl) els.outputReplyHindiEl.value = "";
   resizeAll();
 
+  // ✅ start partial transcript polling while recording
+  startPartialPolling();
+
   try {
     const result = await recorder.start();
+
+    // recording ended here (stop called)
+    stopPartialPolling();
+
     if (result?.tooShort) {
       setStatus(els.statusEl, "too short — hold longer and try again");
-    } else if (result?.blob) {
+      return;
+    }
+
+    if (result?.blob) {
+      if (finalized) return;
+      finalized = true;
+
+      // ✅ wait for all chunk uploads to finish
+      await uploadChain;
+
+      // ✅ streaming finalize
+      if (!streamError) {
+        try {
+          setStatus(els.statusEl, "finalizing stream (stt + translate + advisor)...");
+          const data = await streamFinalize(SESSION_ID, els.langSelect?.value || "unknown");
+
+          if (els.outputOriginalEl) els.outputOriginalEl.value = (data.transcript_original || "").trim();
+          if (els.outputEnglishEl) els.outputEnglishEl.value = (data.translation_en || "").trim();
+          if (els.outputReplyEl) els.outputReplyEl.value = (data.llm_reply || "").trim();
+          if (els.outputReplyHindiEl) els.outputReplyHindiEl.value = (data.llm_reply_hi || "").trim();
+
+          resizeAll();
+
+          if (els.chatLog) {
+            addChatTurn(els.chatLog, {
+              lang: els.langSelect?.value || "Auto",
+              transcript: els.outputOriginalEl?.value || "",
+              translation: els.outputEnglishEl?.value || "",
+              reply: els.outputReplyEl?.value || "",
+            });
+          }
+
+          setStatus(els.statusEl, `done (latency: ${data.latency_ms} ms)`);
+          return;
+        } catch (e) {
+          console.error(e);
+          setStatus(els.statusEl, "stream finalize failed — falling back to batch...");
+        }
+      }
+
+      // ✅ fallback: old batch pipeline
       await processVoice(result.blob, result.mimeType);
     }
   } catch (err) {
+    stopPartialPolling();
     console.error(err);
     setStatus(els.statusEl, "mic error");
     alert(`Microphone error\n${err?.message || ""}`);
